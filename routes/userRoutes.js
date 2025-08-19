@@ -1,5 +1,5 @@
 import express from 'express';
-import { registerUser, loginUser, userCredits, stripeWebhook } from '../controllers/userController.js';
+import { registerUser, loginUser, userCredits} from '../controllers/userController.js';
 import userAuth from '../middlewares/auth.js';
 
 const userRouter = express.Router();
