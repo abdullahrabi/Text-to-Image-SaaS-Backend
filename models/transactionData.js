@@ -5,7 +5,7 @@ const transactionSchema = new mongoose.Schema({
     plan:{type: String, require:true},
     amount:{type: Number, require:true},
     credits:{type: Number, require:true},
-    payment:{type: Boolean, default:false},
+    status: { type: String, enum: ['pending', 'success', 'canceled'], default: 'pending' },
     date: {type: Number },
 
 })
