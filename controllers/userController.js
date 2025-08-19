@@ -139,10 +139,10 @@ const createPaymentIntent = async (req, res) => {
 
     // Save a pending transaction (DB amount in dollars)
     await transactionModel.create({
-      userId,
-      plan,
-      amount,
-      credits,
+      userId:userId,
+      plan:plan,
+      amount:amount,
+      credits:credits,
       date: Date.now(),
       status: 'pending',
       paymentIntentId: paymentIntent.id,
