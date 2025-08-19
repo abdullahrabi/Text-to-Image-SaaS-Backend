@@ -85,75 +85,54 @@ const userCredits = async (req, res) => {
 // ------------------- Create Stripe PaymentIntent -------------------
 const createPaymentIntent = async (req, res) => {
     try {
-        const { credits, amount } = req.body; // amount in cents, credits to give
-        const userId = req.userId; // extracted from JWT middleware
+       
+        const {userId, planId} = req.userId; 
+        const userData = await userModel .findById(userId)
+        
 
-        if (!credits || !amount) {
-            return res.json({ success: false, message: "Missing payment details" });
+        if (!userId || !planId) {
+            return res.json({ success: false, message: "Missing User Id or Plan Id" });
         }
 
-        const paymentIntent = await stripe.paymentIntents.create({
-            amount, // in cents
-            currency: "usd",
-            metadata: {
-                userId: userId,
-                credits: credits
-            }
-        });
+        let credits,plan, amount , date
+        
+        switch (planId) {
+            case 'Basic':
+                plan = 'Basic'
+                credits = 100
+                amount = 10
+                break;
+            case 'Advanced':
+                plan = 'Advanced'
+                credits = 500
+                amount = 50
+                break;
+            case 'Business':
+                plan = 'Business'
+                credits = 5000
+                amount = 250
+                break;
+        
+            default:
+                return res.json({ success: false, message: "Plan not found" });
+        }
+        date = Date.now();
 
-        res.json({
-            success: true,
-            clientSecret: paymentIntent.client_secret
-        });
+        const transactionData = {
+             userId,plan, amount , credits, date
+        }
+        
+        
+       
+
+       
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// ------------------- Stripe Webhook -------------------
-const stripeWebhook = [
-    bodyParser.raw({ type: "application/json" }),
-    async (req, res) => {
-        const sig = req.headers["stripe-signature"];
-        let event;
 
-        try {
-            event = stripe.webhooks.constructEvent(
-                req.body,
-                sig,
-                process.env.STRIPE_WEBHOOK_SECRET
-            );
-        } catch (err) {
-            console.error("⚠️ Webhook signature verification failed:", err.message);
-            return res.sendStatus(400);
-        }
 
-        switch (event.type) {
-            case "payment_intent.succeeded": {
-                const paymentIntent = event.data.object;
-                const userId = paymentIntent.metadata?.userId;
-                const credits = parseInt(paymentIntent.metadata?.credits, 10);
-
-                if (userId && credits) {
-                    await userModel.findByIdAndUpdate(userId, {
-                        $inc: { creditBalance: credits }
-                    });
-                    console.log(`✅ Payment succeeded: added ${credits} credits to user ${userId}`);
-                }
-                break;
-            }
-            case "payment_intent.canceled": {
-                const paymentIntent = event.data.object;
-                console.log(`❌ Payment canceled for intent: ${paymentIntent.id}`);
-                break;
-            }
-            default:
-                console.log(`Unhandled event type: ${event.type}`);
-        }
-
-        res.json({ received: true });
-    }
-];
-
-export { registerUser, loginUser, userCredits, createPaymentIntent, stripeWebhook };
+export { registerUser, loginUser, userCredits, createPaymentIntent };
+ 
