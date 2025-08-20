@@ -10,10 +10,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) return res.json({ success: false, message: 'Missing Details' });
+    if (!name || !email || !password)
+      return res.json({ success: false, message: 'Missing Details' });
 
     const existingUser = await userModel.findOne({ email });
-    if (existingUser) return res.json({ success: false, message: 'User Already Exists' });
+    if (existingUser)
+      return res.json({ success: false, message: 'User Already Exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new userModel({ name, email, password: hashedPassword });
@@ -37,10 +39,12 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.json({ success: false, message: 'Missing Details' });
+    if (!email || !password)
+      return res.json({ success: false, message: 'Missing Details' });
 
     const user = await userModel.findOne({ email });
-    if (!user) return res.json({ success: false, message: 'User does not Exist. Register First!' });
+    if (!user)
+      return res.json({ success: false, message: 'User does not Exist. Register First!' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.json({ success: false, message: 'Invalid Credentials' });
@@ -82,11 +86,11 @@ const createPaymentIntent = async (req, res) => {
     const { planId } = req.body;
     const userId = req.userId;
 
-    const userData = await userModel.findById(userId);
-    if (!userData) return res.json({ success: false, message: 'User not found' });
+    const user = await userModel.findById(userId);
+    if (!user) return res.json({ success: false, message: 'User not found' });
     if (!planId) return res.json({ success: false, message: 'Missing Plan Id' });
 
-    let credits, plan, amount;
+    let plan, credits, amount;
     switch (planId) {
       case 'Basic':
         plan = 'Basic';
@@ -107,7 +111,18 @@ const createPaymentIntent = async (req, res) => {
         return res.json({ success: false, message: 'Plan not found' });
     }
 
-    // Create PaymentIntent
+    // Check for existing pending transaction
+    const existingTxn = await transactionModel.findOne({ userId, plan, status: 'pending' });
+    if (existingTxn) {
+      const pi = await stripe.paymentIntents.retrieve(existingTxn.paymentIntentId);
+      return res.json({
+        success: true,
+        clientSecret: pi.client_secret,
+        message: 'Existing pending PaymentIntent reused',
+      });
+    }
+
+    // Create new Stripe PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount * 100,
       currency: 'usd',
@@ -115,17 +130,18 @@ const createPaymentIntent = async (req, res) => {
       automatic_payment_methods: { enabled: true },
     });
 
-    // Save or update transaction to prevent duplicates
+    // Save transaction in DB
     await transactionModel.findOneAndUpdate(
       { paymentIntentId: paymentIntent.id },
       {
         $set: {
           userId,
           plan,
-          amount,
           credits,
+          amount,
           status: 'pending',
           date: Date.now(),
+          paymentIntentId: paymentIntent.id,
         },
       },
       { upsert: true, new: true }
@@ -155,9 +171,10 @@ const stripeWebhook = async (req, res) => {
   }
 
   try {
+    const intent = event.data.object;
+
     switch (event.type) {
       case 'payment_intent.succeeded': {
-        const intent = event.data.object;
         const txn = await transactionModel.findOne({ paymentIntentId: intent.id });
         if (!txn || txn.status === 'success') break;
 
@@ -171,8 +188,11 @@ const stripeWebhook = async (req, res) => {
       }
 
       case 'payment_intent.canceled': {
-        const intent = event.data.object;
-        await transactionModel.findOneAndUpdate({ paymentIntentId: intent.id }, { status: 'canceled' });
+        const txn = await transactionModel.findOne({ paymentIntentId: intent.id });
+        if (!txn) break;
+        txn.status = 'canceled';
+        await txn.save();
+
         console.log(`❌ Payment canceled: ${intent.id}`);
         break;
       }

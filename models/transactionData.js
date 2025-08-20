@@ -7,7 +7,7 @@ const transactionSchema = new mongoose.Schema({
   credits: { type: Number, required: true },
   status: { type: String, enum: ['pending', 'success', 'canceled'], default: 'pending' },
   date: { type: Date, default: Date.now },
-  paymentIntentId: { type: String, required: true }, // NEW
+  paymentIntentId: { type: String, required: true, unique:true }, 
 
 
 })
