@@ -10,17 +10,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res.json({ success: false, message: 'Missing Details' });
-    }
+    if (!name || !email || !password) return res.json({ success: false, message: 'Missing Details' });
 
     const existingUser = await userModel.findOne({ email });
-    if (existingUser) {
-      return res.json({ success: false, message: 'User Already Exists' });
-    }
+    if (existingUser) return res.json({ success: false, message: 'User Already Exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const newUser = new userModel({ name, email, password: hashedPassword });
     const user = await newUser.save();
 
@@ -42,19 +37,13 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.json({ success: false, message: 'Missing Details' });
-    }
+    if (!email || !password) return res.json({ success: false, message: 'Missing Details' });
 
     const user = await userModel.findOne({ email });
-    if (!user) {
-      return res.json({ success: false, message: 'User does not Exist. Register First!' });
-    }
+    if (!user) return res.json({ success: false, message: 'User does not Exist. Register First!' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.json({ success: false, message: 'Invalid Credentials' });
-    }
+    if (!isMatch) return res.json({ success: false, message: 'Invalid Credentials' });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
@@ -95,7 +84,6 @@ const createPaymentIntent = async (req, res) => {
 
     const userData = await userModel.findById(userId);
     if (!userData) return res.json({ success: false, message: 'User not found' });
-
     if (!planId) return res.json({ success: false, message: 'Missing Plan Id' });
 
     let credits, plan, amount;
@@ -119,7 +107,7 @@ const createPaymentIntent = async (req, res) => {
         return res.json({ success: false, message: 'Plan not found' });
     }
 
-    // Create PaymentIntent in cents
+    // Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount * 100,
       currency: 'usd',
@@ -127,16 +115,21 @@ const createPaymentIntent = async (req, res) => {
       automatic_payment_methods: { enabled: true },
     });
 
-    // Save transaction with paymentIntentId
-    await transactionModel.create({
-      userId,
-      plan,
-      amount,
-      credits,
-      status: 'pending',
-      paymentIntentId: paymentIntent.id,
-      date: Date.now(),
-    });
+    // Save or update transaction to prevent duplicates
+    await transactionModel.findOneAndUpdate(
+      { paymentIntentId: paymentIntent.id },
+      {
+        $set: {
+          userId,
+          plan,
+          amount,
+          credits,
+          status: 'pending',
+          date: Date.now(),
+        },
+      },
+      { upsert: true, new: true }
+    );
 
     res.json({
       success: true,
@@ -166,9 +159,7 @@ const stripeWebhook = async (req, res) => {
       case 'payment_intent.succeeded': {
         const intent = event.data.object;
         const txn = await transactionModel.findOne({ paymentIntentId: intent.id });
-        if (!txn) break;
-
-        if (txn.status === 'success') break;
+        if (!txn || txn.status === 'success') break;
 
         txn.status = 'success';
         await txn.save();
