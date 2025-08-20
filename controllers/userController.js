@@ -137,21 +137,11 @@ const createPaymentIntent = async (req, res) => {
       automatic_payment_methods: { enabled: true },
     });
 
-   // Save or update transaction (ensure only one per user)
-    await transactionModel.findOneAndUpdate(
-      { userId }, // find by userId (only one active txn per user)
-      {
-        $set: {
-          plan,
-          amount,
-          credits,
-          date: Date.now(),
-          status: 'pending',
-          paymentIntentId: paymentIntent.id,
-        },
-      },
-      { new: true, upsert: true } // create if not exists
-    );
+   // Save or update transaction
+   const transactionData = {
+    userId, plan, amount, credits, date
+   }
+    const newTransaction = await transactionModel.create(transactionData);
     
     // Return client_secret so frontend can confirm the payment
     res.json({
