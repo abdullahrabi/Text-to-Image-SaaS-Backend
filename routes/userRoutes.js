@@ -1,11 +1,5 @@
 import express from 'express';
-import {
-  registerUser,
-  loginUser,
-  userCredits,
-  createPaymentIntent,
-  stripeWebhook
-} from '../controllers/userController.js';
+import {registerUser,loginUser,userCredits,createPaymentIntent,stripeWebhook} from '../controllers/userController.js';
 import userAuth from '../middlewares/auth.js';
 import bodyParser from "body-parser";
 
