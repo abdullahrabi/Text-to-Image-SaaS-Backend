@@ -138,16 +138,25 @@ const createPaymentIntent = async (req, res) => {
     });
 
     // Save a pending transaction (DB amount in dollars)
-    await transactionModel.create({
-      userId:userId,
-      plan:plan,
-      amount:amount,
-      credits:credits,
-      date: Date.now(),
-      status: 'pending',
-      paymentIntentId: paymentIntent.id,
-    });
+let txn = await transactionModel.findOne({ userId, plan, status: 'pending' });
 
+if (txn) {
+    txn.amount = amount;
+    txn.credits = credits;
+    txn.date = Date.now();
+    txn.paymentIntentId = paymentIntent.id;
+    await txn.save();
+} else {
+  await transactionModel.create({
+    userId,
+    plan,
+    amount,
+    credits,
+    date: Date.now(),
+    status: 'pending',
+    paymentIntentId: paymentIntent.id,
+  });
+}
     // Return client_secret so frontend can confirm the payment
     res.json({
       success: true,
